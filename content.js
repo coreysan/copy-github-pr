@@ -1,4 +1,3 @@
-
 const copiedButtonText = "Copied!";
 const defaultButtonText = "Copy";
 const timeUntilReset = 2000;
@@ -38,7 +37,14 @@ function initContentScript() {
   const copyButton = document.createElement("button");
   copyButton.textContent = defaultButtonText;
   copyButton.id = 'copy-button';
-  copyButton.style.marginLeft = "10px"; // Add some space between the title and the button
+  copyButton.style.margin = "0 10px";
+  copyButton.style.borderRadius = "1rem";
+  copyButton.style.boxShadow = "0 0 12px rgba(255, 255, 255, 0.2)";
+  copyButton.style.backgroundColor = "black";
+  copyButton.style.color = "white";
+  copyButton.style.border = "none";
+  copyButton.style.padding = "3px 12px";
+  copyButton.style.cursor = "pointer";
 
   // Insert the button next to the PR title
   titleElement.parentElement.insertBefore(
@@ -57,9 +63,11 @@ function initContentScript() {
       .then(() => {
         // Provide user feedback that copying was successful
         copyButton.textContent = copiedButtonText;
+        copyButton.style.boxShadow = "0 0 12px rgba(0, 255, 0, 0.2)";
         // Then change back to the default text
         setTimeout(() => {
           copyButton.textContent = defaultButtonText;
+          copyButton.style.boxShadow = "0 0 12px rgba(255, 255, 255, 0.2)";
         }, timeUntilReset);
       })
       .catch((err) => {
