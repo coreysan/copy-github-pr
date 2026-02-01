@@ -6,8 +6,20 @@ const targetNode = document.getElementById('js-repo-pjax-container');
 const config = { childList: true, subtree: true };
 
 const copyContainerId = 'copy-container';
-const hoverColor = "#333333";
-const defaultBackgroundColor = "black";
+
+// Dark mode colors
+const darkModeBackgroundColor = "black";
+const darkModeTextColor = "white";
+const darkModeHoverColor = "#333333";
+const darkModeSeparatorColor = "white";
+const darkModeShadowColor = "rgba(255, 255, 255, 0.2)";
+
+// Light mode colors
+const lightModeBackgroundColor = "white";
+const lightModeTextColor = "black";
+const lightModeHoverColor = "#e0e0e0";
+const lightModeSeparatorColor = "black";
+const lightModeShadowColor = "rgba(0, 0, 0, 0.2)";
 
 // Select the container element that wraps the PR content
 // We observe this for changes since GitHub uses client-side routing
@@ -23,6 +35,17 @@ const callback = function (mutationsList, observer) {
 const observer = new MutationObserver(callback);
 observer.observe(targetNode, config);
 
+// Listen for system theme changes
+if (window.matchMedia) {
+  window.matchMedia('(prefers-color-scheme: dark)').addListener(() => {
+    const container = document.getElementById(copyContainerId);
+    if (container) {
+      container.remove();
+      initContentScript();
+    }
+  });
+}
+
 // Initialize the content script, adding the copy button if it doesn't exist
 function initContentScript() {
   const existingButton = document.getElementById(copyContainerId);
@@ -37,6 +60,14 @@ function initContentScript() {
     return; 
   }
   
+  // Detect dark/light mode
+  const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const backgroundColor = isDarkMode ? darkModeBackgroundColor : lightModeBackgroundColor;
+  const textColor = isDarkMode ? darkModeTextColor : lightModeTextColor;
+  const hoverColor = isDarkMode ? darkModeHoverColor : lightModeHoverColor;
+  const separatorColor = isDarkMode ? darkModeSeparatorColor : lightModeSeparatorColor;
+  const shadowColor = isDarkMode ? darkModeShadowColor : lightModeShadowColor;
+  
   // Create a new button element
   const copyContainer = document.createElement("div");
   copyContainer.id = copyContainerId;
@@ -45,9 +76,9 @@ function initContentScript() {
   copyContainer.style.margin = "0 10px";
   copyContainer.style.overflow = "hidden";
   copyContainer.style.borderRadius = "1rem";
-  copyContainer.style.boxShadow = "0 0 12px rgba(255, 255, 255, 0.2)";
-  copyContainer.style.backgroundColor = defaultBackgroundColor;
-  copyContainer.style.color = "white";
+  copyContainer.style.boxShadow = `0 0 12px ${shadowColor}`;
+  copyContainer.style.backgroundColor = backgroundColor;
+  copyContainer.style.color = textColor;
   copyContainer.style.border = "none";
 
   const copyPrButton = document.createElement("button");
@@ -55,7 +86,8 @@ function initContentScript() {
   copyPrButton.id = 'copy-pr-button';
   copyPrButton.style.margin = "0";
   copyPrButton.style.border = "none";
-  copyPrButton.style.backgroundColor = defaultBackgroundColor;
+  copyPrButton.style.backgroundColor = backgroundColor;
+  copyPrButton.style.color = textColor;
   copyPrButton.style.borderRadius = "0";
   copyPrButton.style.padding = "3px 12px";
   copyPrButton.style.cursor = "pointer";
@@ -63,13 +95,13 @@ function initContentScript() {
     copyPrButton.style.backgroundColor = hoverColor;
   });
   copyPrButton.addEventListener('mouseout', () => {
-    copyPrButton.style.backgroundColor = defaultBackgroundColor;
+    copyPrButton.style.backgroundColor = backgroundColor;
   });
   
   const separator = document.createElement("div");
   separator.style.width = "1px";
   separator.style.height = "100%";
-  separator.style.backgroundColor = "white";
+  separator.style.backgroundColor = separatorColor;
   separator.style.margin = "0 1px";
   
   const copyPrWithMergeButton = document.createElement("button");
@@ -77,7 +109,8 @@ function initContentScript() {
   copyPrWithMergeButton.id = 'copy-merge-button';
   copyPrWithMergeButton.style.margin = copyPrButton.style.margin;
   copyPrWithMergeButton.style.border = copyPrButton.style.border;
-  copyPrWithMergeButton.style.backgroundColor = copyPrButton.style.backgroundColor;
+  copyPrWithMergeButton.style.backgroundColor = backgroundColor;
+  copyPrWithMergeButton.style.color = textColor;
   copyPrWithMergeButton.style.borderRadius = copyPrButton.style.borderRadius;
   copyPrWithMergeButton.style.padding = copyPrButton.style.padding;
   copyPrWithMergeButton.style.cursor = copyPrButton.style.cursor;
@@ -85,7 +118,7 @@ function initContentScript() {
     copyPrWithMergeButton.style.backgroundColor = hoverColor;
   });
   copyPrWithMergeButton.addEventListener('mouseout', () => {
-    copyPrWithMergeButton.style.backgroundColor = defaultBackgroundColor;
+    copyPrWithMergeButton.style.backgroundColor = backgroundColor;
   });
   
   copyContainer.appendChild(copyPrButton);
@@ -113,7 +146,7 @@ function initContentScript() {
         // Then change back to the default text
         setTimeout(() => {
           copyPrButton.textContent = copyPrButtonText;
-          copyContainer.style.boxShadow = "0 0 12px rgba(255, 255, 255, 0.2)";
+          copyContainer.style.boxShadow = `0 0 12px ${shadowColor}`;
         }, timeUntilReset);
       })
       .catch((err) => {
@@ -132,11 +165,11 @@ function initContentScript() {
         copyContainer.style.boxShadow = "0 0 12px rgba(0, 255, 0, 0.2)";
         setTimeout(() => {
           copyPrWithMergeButton.textContent = copyPrWithMergeButtonText;
-          copyContainer.style.boxShadow = "0 0 12px rgba(255, 255, 255, 0.2)";
+          copyContainer.style.boxShadow = `0 0 12px ${shadowColor}`;
         }, timeUntilReset);
       })
       .catch((err) => {
         console.error("Failed to copy: ", err);
       });
   });
-} 
+};
