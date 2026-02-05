@@ -53,8 +53,9 @@ function initContentScript() {
     return;
   }
 
-  // Find the PR title element
-  const titleElement = document.querySelector(".js-issue-title");
+  // Find the PR title element (new UI: .markdown-title, fallback: .js-issue-title)
+  const titleElement = document.querySelector(".markdown-title") ||
+                       document.querySelector(".js-issue-title");
 
   if (!titleElement) {
     return; 
