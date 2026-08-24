@@ -36,7 +36,8 @@ The button group appears immediately to the right of the PR title. Each button c
 Worth exercising:
 
 - **Both themes.** Colors follow the OS setting (`prefers-color-scheme`), not GitHub's theme picker, and the buttons re-render when the OS setting changes.
-- **Client-side navigation.** GitHub swaps pages without a full load. Click through to **Files changed** / **Commits** and back — a `MutationObserver` re-adds the buttons, and the PR number is read from the URL so it must stay correct on those sub-pages.
+- **Client-side navigation.** GitHub swaps pages without a full load, and this is the most fragile part. Click through to **Files changed** / **Commits** and back, use the browser back button, and — most importantly — open the repo's **Pull requests** list and click into a PR from there, all without refreshing. The buttons must appear every time, and the `#number` must match the PR you are actually on.
+- **Leaving a PR.** Navigate from a PR to the repo home or issues list; the buttons should disappear rather than linger with stale data.
 - **Syntax before loading.** A parse error makes the content script fail silently:
 
   ```bash

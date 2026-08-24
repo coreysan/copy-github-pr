@@ -3,10 +3,10 @@ const copyPrButtonText = "PR";
 const copyPrWithMergeButtonText = "PR+🔀";
 const copyMergedButtonText = "🔀'd";
 const timeUntilReset = 2000;
-const targetNode = document.getElementById("js-repo-pjax-container");
-const config = { childList: true, subtree: true };
+const pollInterval = 1000;
 
 const copyContainerId = "copy-container";
+const copyRowId = "copy-container-row";
 
 // Dark mode colors
 const darkModeBackgroundColor = "black";
@@ -22,29 +22,67 @@ const lightModeHoverColor = "#e0e0e0";
 const lightModeSeparatorColor = "black";
 const lightModeShadowColor = "rgba(0, 0, 0, 0.2)";
 
-// Select the container element that wraps the PR content
-// We observe this for changes since GitHub uses client-side routing
-const callback = function (mutationsList, observer) {
-  let hasMutation = false;
-  for (let mutation of mutationsList) {
-    if (mutation.type !== "childList") continue;
-    hasMutation = true;
-    break;
-  }
-  if (hasMutation) initContentScript();
-};
-const observer = new MutationObserver(callback);
-observer.observe(targetNode, config);
+// GitHub swaps pages in without a full reload, so watch the whole document
+// rather than one container that a soft navigation can replace
+let checkScheduled = false;
+function scheduleCheck() {
+  if (checkScheduled) return;
+  checkScheduled = true;
+  requestAnimationFrame(() => {
+    checkScheduled = false;
+    initContentScript();
+  });
+}
+
+const observer = new MutationObserver(scheduleCheck);
+observer.observe(document.body, { childList: true, subtree: true });
+
+// Belt and braces: back/forward plus the events GitHub's routers fire.
+// Harmless if a given event never arrives.
+window.addEventListener("popstate", scheduleCheck);
+document.addEventListener("turbo:load", scheduleCheck);
+document.addEventListener("pjax:end", scheduleCheck);
+document.addEventListener("soft-nav:end", scheduleCheck);
+
+// Last resort. GitHub can finish a soft navigation without any signal we can
+// observe from an isolated content script (it calls history.pushState in the
+// page's own JS context, which we can't hook). This poll is cheap - two id
+// lookups and a regex - and guarantees the buttons appear within a second
+// however GitHub changes its router.
+setInterval(scheduleCheck, pollInterval);
+
+scheduleCheck();
 
 // Listen for system theme changes
 if (window.matchMedia) {
   window.matchMedia("(prefers-color-scheme: dark)").addListener(() => {
-    const container = document.getElementById(copyContainerId);
-    if (container) {
-      container.remove();
+    if (document.getElementById(copyContainerId)) {
+      removeButtons();
       initContentScript();
     }
   });
+}
+
+// The script now runs on every github.com page so it can catch soft
+// navigations into a PR; only PR pages get buttons
+function isPullRequestPage() {
+  return /^\/[^/]+\/[^/]+\/pull\/\d+/.test(window.location.pathname);
+}
+
+// Read the title at click time rather than holding a reference that a
+// re-render can detach
+function getPrTitle() {
+  const titleElement =
+    document.querySelector(".markdown-title") ||
+    document.querySelector(".js-issue-title");
+  return titleElement ? titleElement.textContent.trim() : "";
+}
+
+function removeButtons() {
+  const row = document.getElementById(copyRowId);
+  if (row) row.remove();
+  const container = document.getElementById(copyContainerId);
+  if (container) container.remove();
 }
 
 // Extract the PR number from the URL (e.g. /owner/repo/pull/4512/files -> 4512)
@@ -55,10 +93,18 @@ function getPrNumber() {
 
 // Initialize the content script, adding the copy button if it doesn't exist
 function initContentScript() {
+  if (!isPullRequestPage()) {
+    removeButtons();
+    return;
+  }
+
   const existingButton = document.getElementById(copyContainerId);
   if (existingButton) {
     return;
   }
+
+  // Clear an orphaned wrapper left behind if a re-render dropped the buttons
+  removeButtons();
 
   // Find the PR title element (new UI: .markdown-title, fallback: .js-issue-title)
   const titleElement =
@@ -159,15 +205,36 @@ function initContentScript() {
   copyContainer.appendChild(separatorTwo);
   copyContainer.appendChild(copyMergedButton);
 
-  // Insert the button next to the PR title
-  titleElement.parentElement.insertBefore(
-    copyContainer,
-    titleElement.nextSibling,
-  );
+  // Insert the buttons at the end of the page header's title area, so they sit
+  // on their own line beneath the PR title, number, and edit button.
+  // Fall back to sitting next to the PR title if that markup isn't found.
+  const titleArea = document.querySelector('[data-component="TitleArea"]');
+
+  if (titleArea) {
+    // The title area lays out as a row, so give the buttons a full-width
+    // wrapper that wraps onto its own line beneath the title and number
+    titleArea.style.flexWrap = "wrap";
+
+    const copyRow = document.createElement("div");
+    copyRow.id = copyRowId;
+    copyRow.style.display = "flex";
+    copyRow.style.width = "100%";
+    copyRow.style.flexBasis = "100%";
+    copyRow.style.justifyContent = "flex-start";
+
+    copyContainer.style.margin = "0";
+    copyRow.appendChild(copyContainer);
+    titleArea.appendChild(copyRow);
+  } else {
+    titleElement.parentElement.insertBefore(
+      copyContainer,
+      titleElement.nextSibling,
+    );
+  }
 
   // Add click event listener to the button
   copyPrButton.addEventListener("click", () => {
-    const prTitle = titleElement.textContent.trim();
+    const prTitle = getPrTitle();
     const prNumber = getPrNumber();
     const linkText = prNumber ? `this PR #${prNumber}` : "this PR";
     const prLink = `[${linkText}](${window.location.href}) — ${prTitle}`;
@@ -191,7 +258,7 @@ function initContentScript() {
   });
 
   copyPrWithMergeButton.addEventListener("click", () => {
-    const prTitle = titleElement.textContent.trim();
+    const prTitle = getPrTitle();
     const prNumber = getPrNumber();
     const linkText = prNumber ? `this PR #${prNumber}` : "this PR";
     const prLink = `see [${linkText}](${window.location.href}) — ${prTitle} — [merge]`;
@@ -212,7 +279,7 @@ function initContentScript() {
   });
 
   copyMergedButton.addEventListener("click", () => {
-    const prTitle = titleElement.textContent.trim();
+    const prTitle = getPrTitle();
     const prNumber = getPrNumber();
     const linkText = prNumber ? `this PR #${prNumber}` : "this PR";
     const prLink = `Merged [${linkText}](${window.location.href}) — ${prTitle}`;
