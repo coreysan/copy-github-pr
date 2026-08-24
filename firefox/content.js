@@ -1,6 +1,7 @@
 const copiedButtonText = "✅";
 const copyPrButtonText = "PR";
 const copyPrWithMergeButtonText = "PR+🔀";
+const copyMergedButtonText = "🔀'd";
 const timeUntilReset = 2000;
 const targetNode = document.getElementById('js-repo-pjax-container');
 const config = { childList: true, subtree: true };
@@ -47,6 +48,12 @@ if (window.matchMedia) {
 }
 
 // Initialize the content script, adding the copy button if it doesn't exist
+// Extract the PR number from the URL (e.g. /owner/repo/pull/4512/files -> 4512)
+function getPrNumber() {
+  const match = window.location.pathname.match(/\/pull\/(\d+)/);
+  return match ? match[1] : null;
+}
+
 function initContentScript() {
   const existingButton = document.getElementById(copyContainerId);
   if (existingButton) {
@@ -76,55 +83,76 @@ function initContentScript() {
   copyContainer.style.gap = "0px";
   copyContainer.style.margin = "0 10px";
   copyContainer.style.overflow = "hidden";
-  copyContainer.style.borderRadius = "1rem";
+  copyContainer.style.borderRadius = "0.25rem";
   copyContainer.style.boxShadow = `0 0 12px ${shadowColor}`;
   copyContainer.style.backgroundColor = backgroundColor;
   copyContainer.style.color = textColor;
   copyContainer.style.border = "none";
 
-  const copyPrButton = document.createElement("button");
-  copyPrButton.textContent = copyPrButtonText;
-  copyPrButton.id = 'copy-pr-button';
-  copyPrButton.style.margin = "0";
-  copyPrButton.style.border = "none";
-  copyPrButton.style.backgroundColor = backgroundColor;
-  copyPrButton.style.color = textColor;
-  copyPrButton.style.borderRadius = "0";
-  copyPrButton.style.padding = "3px 12px";
-  copyPrButton.style.cursor = "pointer";
-  copyPrButton.addEventListener('mouseover', () => {
-    copyPrButton.style.backgroundColor = hoverColor;
-  });
-  copyPrButton.addEventListener('mouseout', () => {
-    copyPrButton.style.backgroundColor = backgroundColor;
-  });
-  
+  // Style a button so GitHub's own button CSS can't leak in and so tall
+  // glyphs (the merge emoji) stay centered instead of spilling out
+  function styleButton(button, id, text) {
+    button.id = id;
+    button.textContent = text;
+    button.style.display = "inline-flex";
+    button.style.alignItems = "center";
+    button.style.justifyContent = "center";
+    button.style.margin = "0";
+    button.style.border = "none";
+    button.style.outline = "none";
+    button.style.boxShadow = "none";
+    button.style.appearance = "none";
+    button.style.backgroundColor = backgroundColor;
+    button.style.backgroundImage = "none";
+    button.style.color = textColor;
+    button.style.borderRadius = "0";
+    button.style.padding = "4px 12px";
+    button.style.font = "inherit";
+    button.style.fontSize = "14px";
+    button.style.lineHeight = "20px";
+    button.style.whiteSpace = "nowrap";
+    button.style.cursor = "pointer";
+    button.addEventListener("mouseover", () => {
+      button.style.backgroundColor = hoverColor;
+    });
+    button.addEventListener("mouseout", () => {
+      button.style.backgroundColor = backgroundColor;
+    });
+    return button;
+  }
+
+  const copyPrButton = styleButton(
+    document.createElement("button"),
+    "copy-pr-button",
+    copyPrButtonText
+  );
+
   const separator = document.createElement("div");
   separator.style.width = "1px";
-  separator.style.height = "100%";
+  separator.style.alignSelf = "stretch";
   separator.style.backgroundColor = separatorColor;
   separator.style.margin = "0 1px";
-  
-  const copyPrWithMergeButton = document.createElement("button");
-  copyPrWithMergeButton.textContent = copyPrWithMergeButtonText;
-  copyPrWithMergeButton.id = 'copy-merge-button';
-  copyPrWithMergeButton.style.margin = copyPrButton.style.margin;
-  copyPrWithMergeButton.style.border = copyPrButton.style.border;
-  copyPrWithMergeButton.style.backgroundColor = backgroundColor;
-  copyPrWithMergeButton.style.color = textColor;
-  copyPrWithMergeButton.style.borderRadius = copyPrButton.style.borderRadius;
-  copyPrWithMergeButton.style.padding = copyPrButton.style.padding;
-  copyPrWithMergeButton.style.cursor = copyPrButton.style.cursor;
-  copyPrWithMergeButton.addEventListener('mouseover', () => {
-    copyPrWithMergeButton.style.backgroundColor = hoverColor;
-  });
-  copyPrWithMergeButton.addEventListener('mouseout', () => {
-    copyPrWithMergeButton.style.backgroundColor = backgroundColor;
-  });
-  
+  separator.style.flex = "0 0 auto";
+
+  const copyPrWithMergeButton = styleButton(
+    document.createElement("button"),
+    "copy-merge-button",
+    copyPrWithMergeButtonText
+  );
+
+  const separatorTwo = separator.cloneNode(true);
+
+  const copyMergedButton = styleButton(
+    document.createElement("button"),
+    "copy-merged-button",
+    copyMergedButtonText
+  );
+
   copyContainer.appendChild(copyPrButton);
   copyContainer.appendChild(separator);
   copyContainer.appendChild(copyPrWithMergeButton);
+  copyContainer.appendChild(separatorTwo);
+  copyContainer.appendChild(copyMergedButton);
   
   // Insert the button next to the PR title
   titleElement.parentElement.insertBefore(
@@ -135,7 +163,9 @@ function initContentScript() {
   // Add click event listener to the button
   copyPrButton.addEventListener("click", () => {
     const prTitle = titleElement.textContent.trim();
-    const prLink = `see [this PR](${window.location.href}) — ${prTitle}`;
+    const prNumber = getPrNumber();
+    const linkText = prNumber ? `this PR #${prNumber}` : "this PR";
+    const prLink = `see [${linkText}](${window.location.href}) — ${prTitle}`;
 
     // Copy the formatted message to the clipboard
     navigator.clipboard
@@ -157,7 +187,9 @@ function initContentScript() {
   
   copyPrWithMergeButton.addEventListener("click", () => {
     const prTitle = titleElement.textContent.trim();
-    const prLink = `see [this PR](${window.location.href}) — ${prTitle} — [merge]`;
+    const prNumber = getPrNumber();
+    const linkText = prNumber ? `this PR #${prNumber}` : "this PR";
+    const prLink = `see [${linkText}](${window.location.href}) — ${prTitle} — [merge]`;
 
     navigator.clipboard
       .writeText(prLink)
@@ -166,6 +198,27 @@ function initContentScript() {
         copyContainer.style.boxShadow = "0 0 12px rgba(0, 255, 0, 0.2)";
         setTimeout(() => {
           copyPrWithMergeButton.textContent = copyPrWithMergeButtonText;
+          copyContainer.style.boxShadow = `0 0 12px ${shadowColor}`;
+        }, timeUntilReset);
+      })
+      .catch((err) => {
+        console.error("Failed to copy: ", err);
+      });
+  });
+
+  copyMergedButton.addEventListener("click", () => {
+    const prTitle = titleElement.textContent.trim();
+    const prNumber = getPrNumber();
+    const linkText = prNumber ? `this PR #${prNumber}` : "this PR";
+    const prLink = `Merged [${linkText}](${window.location.href}) — ${prTitle}`;
+
+    navigator.clipboard
+      .writeText(prLink)
+      .then(() => {
+        copyMergedButton.textContent = copiedButtonText;
+        copyContainer.style.boxShadow = "0 0 12px rgba(0, 255, 0, 0.2)";
+        setTimeout(() => {
+          copyMergedButton.textContent = copyMergedButtonText;
           copyContainer.style.boxShadow = `0 0 12px ${shadowColor}`;
         }, timeUntilReset);
       })
