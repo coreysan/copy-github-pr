@@ -69,11 +69,37 @@ function isPullRequestPage() {
   return /^\/[^/]+\/[^/]+\/pull\/\d+/.test(window.location.pathname);
 }
 
-// Read the title at click time rather than holding a reference that a
-// re-render can detach
+// GitHub's React PR header (new overview and new Files changed) uses
+// CSS-module class names with a hashed suffix, e.g. markdownTitle__jQX53G
+const reactTitleSelector = '[class*="markdownTitle"]';
+
+// The page can hold several TitleAreas (the main header plus a sticky one);
+// the main header is the one with the h1
+function getMainTitleArea() {
+  const titleAreas = document.querySelectorAll('[data-component="TitleArea"]');
+  for (const titleArea of titleAreas) {
+    if (titleArea.querySelector("h1")) return titleArea;
+  }
+  return titleAreas[0] || null;
+}
+
+// e.g. "Fix the thing by octocat · Pull Request #123 · owner/repo · GitHub"
+function getTitleFromDocumentTitle(prNumber) {
+  const match = document.title.match(/^(.*) by \S+ · Pull Request #(\d+) · /);
+  return match && match[2] === prNumber ? match[1].trim() : "";
+}
+
+// Read the title at click time, preferring the document title checked against
+// the URL's PR number so a stale header from a previous page can't leak in.
+// Never use a bare .markdown-title lookup: on the new overview that matches
+// commit messages and cross-referenced PRs in the timeline.
 function getPrTitle() {
+  const fromDocumentTitle = getTitleFromDocumentTitle(getPrNumber());
+  if (fromDocumentTitle) return fromDocumentTitle;
+
+  const titleArea = getMainTitleArea();
   const titleElement =
-    document.querySelector(".markdown-title") ||
+    (titleArea && titleArea.querySelector(reactTitleSelector)) ||
     document.querySelector(".js-issue-title");
   return titleElement ? titleElement.textContent.trim() : "";
 }
@@ -98,20 +124,20 @@ function initContentScript() {
     return;
   }
 
-  const existingButton = document.getElementById(copyContainerId);
-  if (existingButton) {
+  const prNumber = getPrNumber();
+  const existingContainer = document.getElementById(copyContainerId);
+  if (existingContainer && existingContainer.dataset.prNumber === prNumber) {
     return;
   }
 
   // Clear an orphaned wrapper left behind if a re-render dropped the buttons
   removeButtons();
 
-  // Find the PR title element (new UI: .markdown-title, fallback: .js-issue-title)
-  const titleElement =
-    document.querySelector(".markdown-title") ||
-    document.querySelector(".js-issue-title");
+  const titleArea = getMainTitleArea();
+  const legacyTitleElement =
+    titleArea ? null : document.querySelector(".js-issue-title");
 
-  if (!titleElement) {
+  if (!titleArea && !legacyTitleElement) {
     return;
   }
 
@@ -130,6 +156,7 @@ function initContentScript() {
   // Create a new button element
   const copyContainer = document.createElement("div");
   copyContainer.id = copyContainerId;
+  copyContainer.dataset.prNumber = prNumber;
   copyContainer.style.display = "inline-flex";
   copyContainer.style.gap = "0px";
   copyContainer.style.margin = "0 10px";
@@ -207,9 +234,7 @@ function initContentScript() {
 
   // Insert the buttons at the end of the page header's title area, so they sit
   // on their own line beneath the PR title, number, and edit button.
-  // Fall back to sitting next to the PR title if that markup isn't found.
-  const titleArea = document.querySelector('[data-component="TitleArea"]');
-
+  // Fall back to sitting next to the PR title on the legacy markup.
   if (titleArea) {
     // The title area lays out as a row, so give the buttons a full-width
     // wrapper that wraps onto its own line beneath the title and number
@@ -226,9 +251,9 @@ function initContentScript() {
     copyRow.appendChild(copyContainer);
     titleArea.appendChild(copyRow);
   } else {
-    titleElement.parentElement.insertBefore(
+    legacyTitleElement.parentElement.insertBefore(
       copyContainer,
-      titleElement.nextSibling,
+      legacyTitleElement.nextSibling,
     );
   }
 
